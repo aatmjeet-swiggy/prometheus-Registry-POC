@@ -14,6 +14,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	pb "pocs/proto"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"google.golang.org/grpc/reflection"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -35,6 +36,7 @@ func (s *DemoServiceServer) SayHello(ctx context.Context, request *pb.HelloReque
 var (
 	// Create a metrics registry.
 	reg = prometheus.NewRegistry()
+	// reg = prometheus.DefaultRegisterer.(*prometheus.Registry)
 
 	// Create some standard server metrics.
 	grpcMetrics = grpc_prometheus.NewServerMetrics()
@@ -67,6 +69,7 @@ var (
 
 func init() {
 	// Register standard server metrics and customized metrics to registry.
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	reg.MustRegister(grpcMetrics, customizedCounterMetric, randomGauge, randomHistogram)
 	customizedCounterMetric.WithLabelValues("Test")
 }
