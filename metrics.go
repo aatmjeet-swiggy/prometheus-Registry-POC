@@ -11,12 +11,12 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	pb "pocs/proto"
+
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"google.golang.org/grpc/reflection"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc/reflection"
 )
 
 type DemoServiceServer struct {
@@ -35,8 +35,7 @@ func (s *DemoServiceServer) SayHello(ctx context.Context, request *pb.HelloReque
 
 var (
 	// Create a metrics registry.
-	reg = prometheus.NewRegistry()
-	// reg = prometheus.DefaultRegisterer.(*prometheus.Registry)
+	// reg = prometheus.NewRegistry()
 
 	// Create some standard server metrics.
 	grpcMetrics = grpc_prometheus.NewServerMetrics()
@@ -69,9 +68,15 @@ var (
 
 func init() {
 	// Register standard server metrics and customized metrics to registry.
-	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	reg.MustRegister(grpcMetrics, customizedCounterMetric, randomGauge, randomHistogram)
+	// reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	// reg.MustRegister(grpcMetrics, customizedCounterMetric, randomGauge, randomHistogram)
+	prometheus.MustRegister(customizedCounterMetric, randomHistogram)
 	customizedCounterMetric.WithLabelValues("Test")
+}
+
+func GetMetricRegistry() *prometheus.Registry {
+	// Return the default registry as a *prometheus.Registry
+	return prometheus.DefaultRegisterer.(*prometheus.Registry)
 }
 
 // NOTE: Graceful shutdown is missing. Don't use this demo in your production setup.
@@ -83,8 +88,12 @@ func main() {
 	}
 	defer lis.Close()
 
+	// Using default Register to create my registry
+	GetMetricRegistry().MustRegister(randomGauge)
+
 	// Create a HTTP server for prometheus.
-	httpServer := &http.Server{Handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), Addr: fmt.Sprintf("0.0.0.0:%d", 9091)}
+	// httpServer := &http.Server{Handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), Addr: fmt.Sprintf("0.0.0.0:%d", 9091)}
+	httpServer := &http.Server{Handler: promhttp.Handler(), Addr: fmt.Sprintf("0.0.0.0:%d", 9091)}
 
 	// Create a gRPC Server with gRPC interceptor.
 	grpcServer := grpc.NewServer(
@@ -93,32 +102,32 @@ func main() {
 	)
 
 	pb.RegisterDemoServiceServer(grpcServer, newDemoServer())
-    grpc_prometheus.Register(grpcServer)
-    reflection.Register(grpcServer)
+	grpc_prometheus.Register(grpcServer)
+	reflection.Register(grpcServer)
 
-    go func() {
-        if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatalf("failed to start Prometheus HTTP server: %v", err)
-        }
-    }()
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("failed to start Prometheus HTTP server: %v", err)
+		}
+	}()
 
-    go func() {
-        if err := grpcServer.Serve(lis); err != nil {
-            log.Fatalf("failed to start gRPC server: %v", err)
-        }
-    }()
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to start gRPC server: %v", err)
+		}
+	}()
 
-    go func() {
-        for {
+	go func() {
+		for {
 			value := rand.Float64() * 100
 			log.Printf("Observing value: %f", value)
 			randomHistogram.WithLabelValues("example").Observe(value)
-            randomGauge.WithLabelValues("example").Set(value)
-            time.Sleep(5 * time.Second)
-        }
-    }()
+			randomGauge.WithLabelValues("example").Set(value)
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
-    select {}
+	select {}
 
 	// // Create a new api server.
 	// demoServer := newDemoServer()
